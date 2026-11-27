@@ -23,3 +23,22 @@
 
 No hosted checks, external users, production use or registry publication yet.
 The oracle fixtures establish only the declared model, not engine compatibility.
+
+## Paired-plan comparison, 2026-11-27
+
+Private validation on base8ae4725:
+
+- 38 unittest tests passed on Python3.10,3.13,3.14,3.15, including all26 preexisting
+  tests and12 comparison tests.
+- 250 deterministic paired-plan fixtures compare per-source counts with the
+  separate row-materializing oracle. Equal-total source reversals, nested plans,
+  source zero transitions, intermediate budget failures and exact large integers
+  have explicit checks.
+- Ruff lint and format-check passed. Wheel/sdist build passed. A wheel installed
+  into a separate Python3.13 environment passed API and actual CLI budget-exit
+  checks from outside the source checkout.
+- Four private mutants were rejected: total-only equality, reversed loss test,
+  candidate-only budget verdict and omitted witnesses.
+- No expanded-value equality, engine compatibility or production-use validation
+  is claimed. Both plans receive independent visit allowances, not a shared cap.
+- Hosted CI and rendered README are publication checks, not completed privately.
