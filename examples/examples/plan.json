@@ -1,0 +1,33 @@
+{
+  "schema": "explodeforecast-plan-v1",
+  "expansions": [
+    {
+      "name": "orders",
+      "path": [
+        "orders"
+      ],
+      "absent": "drop",
+      "empty": "drop",
+      "children": [
+        {
+          "name": "items",
+          "path": [
+            "items"
+          ],
+          "absent": "error",
+          "empty": "drop",
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "tags",
+      "path": [
+        "tags"
+      ],
+      "absent": "drop",
+      "empty": "drop",
+      "children": []
+    }
+  ]
+}
