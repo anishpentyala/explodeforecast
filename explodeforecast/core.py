@@ -157,7 +157,7 @@ def _validate_data(records, limits):
     return visited
 
 
-def audit(records, plan, *, limits=None, max_rows=None, examples=0):
+def _audit(records, plan, *, limits=None, max_rows=None, examples=0, source_counts=None):
     """Audit complete supplied records under explicit dependent-product semantics.
 
     Trees are visited preorder. Siblings multiply. Children expand each element
@@ -243,6 +243,8 @@ def audit(records, plan, *, limits=None, max_rows=None, examples=0):
             largest[stop] = max(largest[stop], current)
             counts.append(current)
             previous = current
+        if source_counts is not None:
+            source_counts.append(counts[-1])
         if len(witnesses) < examples and counts[-1] != 1:
             witnesses.append({"record_index": record_index, "rows_after_stage": counts})
 
@@ -276,6 +278,87 @@ def audit(records, plan, *, limits=None, max_rows=None, examples=0):
         },
         "visits": visits,
     }
+
+
+def audit(records, plan, *, limits=None, max_rows=None, examples=0):
+    """Count one complete expansion plan; see the explicit model in the README."""
+    return _audit(records, plan, limits=limits, max_rows=max_rows, examples=examples)
+
+
+def compare(records, base_plan, candidate_plan, *, limits=None, max_rows=None, examples=0):
+    """Compare final row counts per input position, not expanded values or identity.
+
+    Limits apply independently to each complete plan, including input validation.
+    Both audits must complete; an error on either side returns no partial result.
+    """
+    if type(examples) is not int or not 0 <= examples <= 100:
+        raise AuditError("examples must be from 0 through 100")
+    base_counts, candidate_counts = [], []
+    base = _audit(
+        records, base_plan, limits=limits, max_rows=max_rows, examples=0, source_counts=base_counts
+    )
+    candidate = _audit(
+        records,
+        candidate_plan,
+        limits=limits,
+        max_rows=max_rows,
+        examples=0,
+        source_counts=candidate_counts,
+    )
+    increased = decreased = unchanged = newly_lost = newly_surviving = 0
+    added_rows = removed_rows = 0
+    witnesses = []
+    for index, (before, after) in enumerate(zip(base_counts, candidate_counts)):
+        increased += after > before
+        decreased += after < before
+        unchanged += after == before
+        newly_lost += before > 0 and after == 0
+        newly_surviving += before == 0 and after > 0
+        added_rows += max(0, after - before)
+        removed_rows += max(0, before - after)
+        if before != after and len(witnesses) < examples:
+            witnesses.append(
+                {
+                    "record_index": index,
+                    "base_rows": before,
+                    "candidate_rows": after,
+                    "delta": after - before,
+                }
+            )
+    return {
+        "schema": "explodeforecast-comparison-v1",
+        "records": len(records),
+        "base": base,
+        "candidate": candidate,
+        "delta_rows": candidate["output_rows"] - base["output_rows"],
+        "sources_increased": increased,
+        "sources_decreased": decreased,
+        "sources_unchanged": unchanged,
+        "newly_lost_sources": newly_lost,
+        "newly_surviving_sources": newly_surviving,
+        "added_rows": added_rows,
+        "removed_rows": removed_rows,
+        "same_source_counts": increased == decreased == 0,
+        "within_budget": base["within_budget"] and candidate["within_budget"],
+        "examples": witnesses,
+        "settings": {"examples": examples, "limits_scope": "per_plan"},
+    }
+
+
+def compare_bytes(data, base_plan, candidate_plan, **options):
+    """Compare plans on the same bounded UTF-8 input with an exact-byte receipt."""
+    limits = options.get("limits") or Limits()
+    if type(limits) is not Limits or type(data) is not bytes:
+        raise AuditError("expected bytes and Limits")
+    if len(data) > limits.max_bytes:
+        raise AuditError("input byte limit exceeded")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeError as exc:
+        raise AuditError("input is not UTF-8") from exc
+    result = compare(loads(text), base_plan, candidate_plan, **options)
+    result["input"] = {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    return result
 
 
 def audit_bytes(data, plan, **options):
