@@ -106,6 +106,53 @@ source indexes reveal which input positions change. This is not anonymization.
 Keep source files and reports in an appropriate place. Error text avoids source
 values and paths; the invoking shell command can still expose filenames.
 
+## Compare two declared plans
+
+A total can stay the same while different source records disappear or multiply.
+Compare both plans on the **same complete input**, matched only by input position:
+
+```sh
+explodeforecast examples/orders.json examples/plan.json --compare-plan examples/by-tags.json --examples 3
+```
+
+```python
+from explodeforecast import compare
+report = compare(records, base_plan, candidate_plan, max_rows=100000, examples=3)
+```
+
+`explodeforecast-comparison-v1` contains both complete audit reports plus:
+
+- Counts of source positions with increased, decreased and unchanged final row
+  counts. `same_source_counts` means only that these counts match per position.
+- Newly lost sources (positive to zero) and newly surviving sources (zero to
+  positive). This compares final source counts, not each plan's intermediate losses.
+- `added_rows` sums positive per-source count differences. `removed_rows` sums
+  negative differences in magnitude. Their difference equals `delta_rows`.
+  These are **count differences, not identified added/deleted output rows**.
+- First up to `--examples` changed input positions with base/candidate final counts
+  and signed delta. Default 0, maximum100; summaries always cover every source.
+- `within_budget` requires **both** plans to satisfy the same optional row budget
+  at every intermediate stage. Each nested report has its own budget verdict.
+
+For example, base contributions `[2, 0, 1]` and candidate `[0, 2, 1]` both total3,
+but comparison reports one increased, one decreased and one unchanged source,
+one newly lost and one newly surviving, `added_rows=2`, `removed_rows=2`,
+`delta_rows=0`, and `same_source_counts=false`.
+
+Plan names, shapes and stage counts may differ. This does not compare expanded
+values, output-row identity, order or schema, and **does not prove equivalent
+transformations**, even when every source count matches. It does not align
+separate datasets by ID. Both plans must validate completely; an invalid side
+returns exit2 with no JSON report. Plan names appear in the nested reports.
+
+`compare_bytes(data, base_plan, candidate_plan, **options)` adds the same exact
+input-byte receipt as `audit_bytes`. The byte input is decoded once. Each plan
+gets its own full structure/evaluation visit allowance, explicitly recorded as
+`limits_scope="per_plan"`. Thus comparison can use twice a single audit's work
+allowance, plus O(N) count comparison, and retains two O(N) final-count lists
+for N input records. The usual record, byte, stage and depth limits still apply.
+No expanded rows are built. Existing single-plan calls and exit codes are unchanged.
+
 ## Bounds and cost
 
 Defaults: 8 MiB record bytes, 10,000 source records, 32 stages, input nesting depth
