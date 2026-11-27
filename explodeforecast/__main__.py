@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from .core import AuditError, Limits, audit_bytes, loads
+from .core import AuditError, Limits, audit_bytes, compare_bytes, loads
 
 
 def _read(path, cap):
@@ -34,19 +34,22 @@ def main(argv=None, *, stdout=None, stderr=None):
         default=0,
         help="up to100 changed source indexes, default0",
     )
+    parser.add_argument("--compare-plan", help="candidate plan for paired per-source counts")
     parser.add_argument("--max-bytes", type=int, default=8 * 1024 * 1024)
     parser.add_argument("--max-visits", type=int, default=1000000)
     args = parser.parse_args(argv)
     try:
         limits = Limits(max_bytes=args.max_bytes, max_visits=args.max_visits)
         plan = loads(_read(args.plan, min(limits.max_bytes, 262144)).decode("utf-8-sig"))
-        result = audit_bytes(
-            _read(args.records, limits.max_bytes),
-            plan,
-            limits=limits,
-            max_rows=args.max_rows,
-            examples=args.examples,
-        )
+        data = _read(args.records, limits.max_bytes)
+        options = dict(limits=limits, max_rows=args.max_rows, examples=args.examples)
+        if args.compare_plan is None:
+            result = audit_bytes(data, plan, **options)
+        else:
+            candidate = loads(
+                _read(args.compare_plan, min(limits.max_bytes, 262144)).decode("utf-8-sig")
+            )
+            result = compare_bytes(data, plan, candidate, **options)
         body = json.dumps(result, ensure_ascii=True, sort_keys=True) + "\n"
         written = out.write(body)
         if written is not None and written != len(body):
